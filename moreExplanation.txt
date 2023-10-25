@@ -1,0 +1,36 @@
+Question 1: do all the processes in the same level have the same priority
+so its essentially FIFO in a way?
+	- Essentially yes, the priority of the processes on the same level
+	  are the same.
+
+Question 2: in the output text for input-complex-CORRECT-OUTPUT, is the
+reason that process 1583 keep dropping levels is because it meets its
+quantum and then drops?
+	- Didn't ask but self-explanatory, it is dropping because its
+	  meeting the quantum.
+
+Question 3: When the process is preempted, and it "keeps" its spot in
+the queue, where does the process go that is higher priority? (the one that
+preempted the other one.) Its in some sort of stasis?
+	- This only happens because a higher level process arrives, so
+	  both processes should keep their places, unless of course the
+	  process that preempts the other, finished its whole quantum.
+
+Keep in Mind: 
+	I/O is one tick at a time. 
+	When processes need I/O they are sent into a blocked queue. 
+
+Question 4: Does processes that need I/O all get attention or is it
+one at a time? EX: Blocked = [P1, P2, P3, P4] when io comes do they all get
+a tick or is it one at a time FIFO?
+	- Every process in the blocked queue does one tick of I/O when
+	  its I/O time.
+
+NOTES:
+
+1) Make a separate method that checks if all queues are empty.
+2) Understand when exactly the process writes a "QUEUED" message
+   and other messages.
+3) when a process does "bad" it means it uses the whole "quantum".
+4) With the promotion and demotion counter.
+5) View the document for set b, g and quantum for each level.
