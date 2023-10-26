@@ -1,5 +1,6 @@
 
 #include <string.h>
+#include <stdlib.h>
 #include "prioque.h"
 
 // ANTHONY ALVAREZ (89-9962639)
@@ -65,6 +66,7 @@
 // for another process to become ready. Your scheduler should exit when all processes
 // from the input have been executed completely.
 
+
 #define VOID -1
 #define RUNNING 0
 #define BLOCKED 1    
@@ -82,22 +84,18 @@ typedef struct Process {
 	unsigned long burstRemaining;
 	unsigned long IORemaining;
 	unsigned long quantum;
+	unsigned long quantumRemaining;
 	unsigned long usageCPU;
+	int inWhichQueue;
 	int state;
-	int g; // Promotion
 	int b; // Demotion
+	int g; // Promotion
 } Process;
 
-int Process_Compare(const void *e1, const void *e2) {
-	Process *p1 = (Process *) e1;
-	Process *p2 = (Process *) e2;
-	if(p1->priority == p2->priority) {
-		return 1;
-	}
-	else {
-		return 0;
-	}
-}
+int processesExist(Queue*,Queue*,Queue*,Queue*,Queue*,Queue*);
+int readyProcess(Queue*,Queue*,Queue*,Queue*);
+int grabReadyProcess(Queue*, Queue*, Queue*, Queue*, Process*);
+int demotionCheck(Queue*,Queue*,Queue*,Queue*,Process*,Queue*,Queue*); 
 
 int main(int argc, char *argv[]) {
 
@@ -107,7 +105,7 @@ int main(int argc, char *argv[]) {
 	// Initializing Queues.
 	Queue notArrived;
 	unsigned long element;
-	init_queue(&notArrived, sizeof(Process), TRUE, Process_Compare, FALSE);  
+	init_queue(&notArrived, sizeof(Process), TRUE, FALSE, FALSE);  
 
 	// Section 1.1:
 	// While loop that gathers all input, turns it into processes and puts them in queue.
@@ -117,9 +115,10 @@ int main(int argc, char *argv[]) {
 	Process newP;
 	while (scanf("%lu %lu %lu %lu %lu", &(newP.arrivalTime), &(newP.PID), &(newP.burst), &(newP.IO), &(newP.repeat)) == 5) {
 		printf("Process #%lu with PID: %lu added with to the queue.\n", element, newP.PID);
-		newP.priority = 0;//newP.burst; use this for setting priority based on burst times
+		//newP.burst; use this for setting priority based on burst times
 		newP.burstRemaining = newP.burst;
-		add_to_queue(&notArrived, &newP, newP.priority);
+		newP.IORemaining = newP.IO;
+		add_to_queue(&notArrived, &newP, 0);
 		element++;
 	}
 
@@ -130,11 +129,10 @@ int main(int argc, char *argv[]) {
 	printf("\n");
 	printf("[*] Queue contains:\n");
 	while (!end_of_queue(&notArrived)) {
-		printf("Element: %lu PID: %lu Time: %lu Priority: %d\n",
+		printf("Element: %lu PID: %lu Time: %lu\n",
 				++element, 
 				((Process *) pointer_to_current(&notArrived))->PID,
-				((Process *) pointer_to_current(&notArrived))->arrivalTime,
-				current_priority(&notArrived));
+				((Process *) pointer_to_current(&notArrived))->arrivalTime);
 		next_element(&notArrived);
 	}
 
@@ -145,26 +143,33 @@ int main(int argc, char *argv[]) {
 	
 	// SECTION 2: CREATING THE SCHEDULERS HIGH-LEVEL STRUCTURE (basic attempt)
 	// 2.1: HANDLES ARRIVALS | 2.2: HANDLES EXECUTING | 2.3 HANDLES IO/PROMOTION/DEMOTION/EXIT (NOT DONE) 
-	
+	// Change all peek_at_current to pointer_to_current	
 	printf("[*] Entering High Level Queue....\n");
 
 	Queue blocked;
 	Queue level1;
-	init_queue(&blocked, sizeof(Process), TRUE, Process_Compare, FALSE);
-	init_queue(&level1, sizeof(Process), TRUE, Process_Compare, FALSE);
-	Process nullProc = {0,0,0,0,0,0,0,0,0,0,READY};
-	Process procExecuting = {0,0,0,0,0,0,0,0,0,0,VOID};
+	Queue level2;
+	Queue level3;
+	Queue level4;
+	Queue terminated;
+	init_queue(&blocked, sizeof(Process), TRUE, FALSE, FALSE);
+	init_queue(&level1, sizeof(Process), TRUE, FALSE, FALSE);
+	init_queue(&level2, sizeof(Process), TRUE, FALSE, FALSE);
+	init_queue(&level3, sizeof(Process), TRUE, FALSE, FALSE);
+	init_queue(&level4, sizeof(Process), TRUE, FALSE, FALSE);
+	init_queue(&terminated, sizeof(Process), TRUE, FALSE, FALSE);
+	Process nullProc = {0,0,0,0,0,0,0,0,0,0,0,0,READY,0,0};
+	Process procExecuting = {0,0,0,0,0,0,0,0,0,0,0,0,VOID,0,0};
 	int pExecuting;
 	unsigned long clock=0; // Internal Scheduler Clock
-	while(!empty_queue(&notArrived) || !empty_queue(&level1)) {
+	while(processesExist(&notArrived,&blocked,&level1,&level2,&level3,&level4) && clock != 2000) {
 
 		// Section 2.1: Handling arrival processes.
 		// I'm using Process "procArriving" to keep track of processes that are currently arriving
 		// from the "notArrived" array.
 		Process procArriving;
-		int pArrival;
 		rewind_queue(&notArrived);
-		peek_at_current(&notArrived, &procArriving, &pArrival);
+		peek_at_current(&notArrived, &procArriving, 0);
 		
 		// This while loop will enqueue all processes that arrive at a certain clock time
 		// into the level1 queue.
@@ -174,30 +179,40 @@ int main(int argc, char *argv[]) {
 			delete_current(&notArrived);
 			procArriving.state = READY;
 			procArriving.quantum = 10;
-			add_to_queue(&level1, &procArriving, pArrival);
+			procArriving.quantumRemaining = 10;
+			procArriving.inWhichQueue = 1;
+			add_to_queue(&level1, &procArriving, 0);
 			element++;
 
-			if(!peek_at_current(&notArrived, &procArriving, &pArrival))
+			if(!peek_at_current(&notArrived, &procArriving, 0))
 				break;
 		}
 
 		// Section 2.2: Handles choosing process to execute.
 		// If empty, null process will tick.
-		if(empty_queue(&level1)) {
+		if(!readyProcess(&level1,&level2,&level3,&level4)) {
 			nullProc.usageCPU = nullProc.usageCPU + 1;
 		}
 		else {
 			// If nothing is executing, grab process in front and begin execution.
-			if(procExecuting.state == VOID) {
+			if(procExecuting.PID == 0) {
 				rewind_queue(&level1);
-				peek_at_current(&level1, &procExecuting, &pExecuting);
-				printf("RUN: Process %lu started execution from level 1 at time %lu;\n",
-						procExecuting.PID, clock);
-				printf("wants to execute for %lu ticks.\n", procExecuting.burstRemaining);
-				
+				//peek_at_current(&level1, &procExecuting, &pExecuting);
+				grabReadyProcess(&level1,&level2,&level3,&level4,&procExecuting);
+				//if(procExecuting.IORemaining != 0) {
+					printf("RUN: Process %lu started execution from level %d at time %lu ",
+										procExecuting.PID, procExecuting.inWhichQueue, clock);
+					printf("wants to execute for %lu ticks. Repeat: %lu\n", 
+							procExecuting.burstRemaining, procExecuting.repeat);
+				//}
 				// trickle down burst one tick at a time
 				if(procExecuting.burstRemaining > 0) {
 					procExecuting.burstRemaining = procExecuting.burstRemaining - 1;
+					procExecuting.quantumRemaining--;
+					
+					if(procExecuting.quantumRemaining == 0) {
+						procExecuting.b++;
+					}
 					// procExecuting.usageCPU++ or something... incorporate usage tracking.
 				}
 				// burst must be depleted, check if i/o needs to be done, if not then tick down repeat.
@@ -205,28 +220,31 @@ int main(int argc, char *argv[]) {
 					if(procExecuting.IORemaining > 0) {
 						// I/O needs to be done, remove processes from level1 queue
 						// and move them into the blocked queue.
-						printf("FINISHED: Process %lu finished at time %lu.\n", 
+						printf("I/O: Process %lu blocked for I/O at time %lu.\n", 
 								procExecuting.PID, clock);		
 						procExecuting.state = BLOCKED;
-						add_to_queue(&blocked, &procExecuting, procExecuting.priority);
+						add_to_queue(&blocked, &procExecuting, 0);
 						delete_current(&level1);
-						procExecuting.state = VOID;
-						
+						procExecuting = nullProc;
 						
 					}
-					// No burst or IO, so check if repeat needs to be done.
-					// WONT BE REACHED BECAUSE ITS BURST->IO->REPEAT BUT WE DELETE AT IO FOR TESTING
+					// No burst or IO, so check if repeat needs to be done. 					
 					else {
-						if(procExecuting.repeat > 0) {
-							procExecuting.repeat = procExecuting.repeat - 1;
-							// Need to restart burst and IO but for testing, it remains untouched.
-						}
+						//printf("Hello");
+						//if(procExecuting.repeat > 0) {
+						//	procExecuting.repeat = procExecuting.repeat - 1;
+						//	procExecuting.burstRemaining = procExecuting.burst;
+						//	procExecuting.IORemaining = procExecuting.IO;
+						//}
 
-						else {
+						//else {
 							// no burst, io, or repeat left so terminate the process.
+							printf("FINISHED: Process %lu finished at time %lu.\n",
+									procExecuting.PID, clock);
 							delete_current(&level1);
-							procExecuting.state = VOID;
-						}
+							add_to_queue(&terminated, &procExecuting, 0);
+							procExecuting = nullProc;
+						//}
 					}
 				}
 			}
@@ -236,32 +254,39 @@ int main(int argc, char *argv[]) {
 				// Burst
 				if(procExecuting.burstRemaining > 0) {
 					procExecuting.burstRemaining = procExecuting.burstRemaining - 1;
+					procExecuting.quantumRemaining--;
+					
+					if(procExecuting.quantumRemaining == 0) {
+						procExecuting.b++;
+					}
 				}
 
 				else {
-					// IO (DELETING PROCESSES AFTER ONE SET OF BURST FOR NOW)
+					// IO
 					if(procExecuting.IORemaining > 0) {
 						rewind_queue(&level1);
-						printf("FINISHED: Process %lu finished at time %lu.\n", 
+						printf("I/O: Process %lu blocked for I/O at time %lu.\n", 
 								procExecuting.PID, clock);
-						procExecuting.state = BLOCKED;
-						add_to_queue(&blocked, &procExecuting, procExecuting.priority);
+						add_to_queue(&blocked, &procExecuting, 0);
 						delete_current(&level1);
-						procExecuting.state = VOID;
+						procExecuting = nullProc;
 					}
 					// No burst or IO, so check repeat
-					// (WONT BE REACHED FOR NOW)
 					else {
-						if(procExecuting.repeat > 0) {
-							procExecuting.repeat = procExecuting.repeat - 1;
-							// need to reset io and burst, leave for later.
-						}
+						//if(procExecuting.repeat > 0) {
+						//	procExecuting.repeat = procExecuting.repeat - 1;
+						//	procExecuting.burstRemaining = procExecuting.burst;
+						//	procExecuting.IORemaining = procExecuting.IO;
+						//}
 						
-						else {
+						//else {
 							// no burst, io, or repeat left so its terminated.
+							printf("FINISHED: Process %lu finished at time %lu.\n",
+									procExecuting.PID, clock);
+							add_to_queue(&terminated, &procExecuting, 0);
 							delete_current(&level1);
-							procExecuting.state = VOID;
-						}	
+							procExecuting = nullProc;
+						//}	
 					}	
 				}
 			}
@@ -271,7 +296,72 @@ int main(int argc, char *argv[]) {
 		// START HERE
 		
 		// FOR I/O, all processes in the blocked queue needs to get one tick of their I/O completed.
-		
+		if(!empty_queue(&blocked)) {
+			rewind_queue(&blocked);
+			while(!end_of_queue(&blocked)) {
+				Process *curr = (Process *) pointer_to_current(&blocked);
+				
+				if(curr->IORemaining == 0) {
+					//printf("QUEUED: Process %lu queued at level %d at time %lu.\n",
+					//	       	curr->PID, curr->inWhichQueue, clock);
+					curr->b = 0;
+					if(curr->repeat > 1) {
+						curr->repeat = curr->repeat - 1;
+						curr->burstRemaining = curr->burst;
+						curr->IORemaining = curr->IO;
+					}
+					else {
+						curr->repeat = curr->repeat - 1;
+						curr->burstRemaining = curr->burst;
+					}
+
+					switch(curr->inWhichQueue) {
+						case 1:
+							add_to_queue(&level1, curr, 0);
+							break;
+						case 2:
+							add_to_queue(&level2, curr, 0);
+							break;
+						case 3:
+							add_to_queue(&level3, curr, 0);
+							break;
+						case 4:
+							add_to_queue(&level4, curr, 0);
+							break;
+						default:
+							printf("ERROR: lost track of where process belonged");
+							exit(0);
+							break;
+					}
+					
+					delete_current(&blocked);
+
+				}
+				else {
+					//printf("%lu %lu %lu ", curr.PID, curr.burstRemaining, curr.IORemaining);
+					curr->IORemaining = curr->IORemaining - 1;
+					//printf("%lu %lu %lu\n", curr.PID, curr.burstRemaining, curr.IORemaining);	
+				}
+				
+				if(!empty_queue(&blocked)) {
+					next_element(&blocked);
+				}
+			}
+		}
+
+		// Do promotion and demotion decisions.
+		// BROKEN
+		/* Queue* currQ; */
+		/* Queue* nextQ; */
+		/* if(procExecuting.PID != 0 && */ 
+		/* 		procExecuting.b == demotionCheck(&level1, &level2, &level3, &level4, &procExecuting, currQ, nextQ)) { */	
+		/* 	printf("QUEUED: Process %lu queued at level %d at time %lu\n", */
+		/* 			procExecuting.PID, ++procExecuting.inWhichQueue, clock); */
+		/* 	rewind_queue(currQ); */
+		/* 	delete_current(currQ); */
+		/* 	add_to_queue(nextQ,&procExecuting,0); */
+		/* } */
+
 		clock++;
 	}
 
@@ -293,24 +383,130 @@ int main(int argc, char *argv[]) {
 		next_element(&level1);
 	}
 	
-	// WILL BE REMOVED JUST CHECKING IF ALL THE PROCESSES REACHED THE BLOCK STATE.
-	// SHOULD CONTAIN ALL PROCESSES.
-	printf("\n[*] Printing Blocked Queue... (should be all the processes)\n");
+	// WILL BE REMOVED JUST CHECKING IF ALL THE PROCESSES LEFT THE BLOCKED QUEUE/STATE
+	// SHOULD CONTAIN NO PROCESSES
+	printf("\n[*] Printing Blocked Queue...\n");
 	element=1;
 	rewind_queue(&blocked);
 	while (!end_of_queue(&blocked)) {
-		printf("Element: %lu PID: %lu Time: %lu Priority: %d\n",
+		printf("Element: %lu PID: %lu Time: %lu I/O Remain: %lu I/O: %lu\n",
 				element++,
 				((Process *) pointer_to_current(&blocked))->PID,
 				((Process *) pointer_to_current(&blocked))->arrivalTime,
-				current_priority(&blocked));
+				((Process *) pointer_to_current(&blocked))->IORemaining,
+				((Process *) pointer_to_current(&blocked))->IO);
 		next_element(&blocked);
 	}
 
-	printf("\n");
+	// WILL BE REMOVED JUST CHECKING IF ALL THE PROCESSES REACHED THE TERMINATED QUEUE/STATE
+	// SHOULD CONTAIN ALL PROCESSES
+	printf("\n[*] Printing Terminated Queue...\n");
+	element=1;
+	rewind_queue(&terminated);
+	while(!end_of_queue(&terminated)) {
+		Process *curr = (Process *) pointer_to_current(&terminated);
+		printf("Element: %lu PID: %lu Time: %lu Burst: %lu I/O: %lu Repeat: %lu\n",
+				element++,
+				curr->PID,
+				curr->arrivalTime,
+				curr->burstRemaining,
+				curr->IORemaining,
+				curr->repeat);
+		next_element(&terminated);
+	}
 
-	printf("[*] Checking NULL process usage ...\n");
+	printf("\n[*] Checking NULL process usage ...\n");
 	printf("NULL Process' CPU Usage: %lu\n", nullProc.usageCPU); 
 	printf("\n[*] Exiting program...\n");
 
 }
+
+int processesExist(Queue *a, Queue *b, Queue *one, Queue *two, Queue *three, Queue *four) {
+	
+	// Fix this, it needs !empty_queue(b)
+	if(!empty_queue(a) || !empty_queue(one) || !empty_queue(two) || !empty_queue(three) || !empty_queue(four)) {
+		return 1;
+	}
+	else {
+		return 0;
+	}
+}
+
+int readyProcess(Queue *one, Queue *two, Queue *three, Queue *four) {
+	
+	if(!empty_queue(one) || !empty_queue(two) || !empty_queue(three) || !empty_queue(four)) {
+		return 1;
+	}
+	else {
+		return 0;
+	}
+
+}
+
+int grabReadyProcess(Queue *one, Queue *two, Queue *three, Queue *four, Process *proc) {
+
+	int ret = 0;
+	if(pointer_to_current(one) != NULL) {
+		rewind_queue(one);
+		peek_at_current(one, proc, 0);
+		ret = 1;
+		return ret;
+	}
+	else if(pointer_to_current(two) != NULL) {		
+		rewind_queue(two);
+		peek_at_current(two, proc, 0);
+		ret = 1;
+		return ret;
+	}
+	else if(pointer_to_current(three) != NULL) {
+		rewind_queue(three);
+		peek_at_current(three, proc, 0);
+		ret = 1;
+		return ret;
+	}
+	else if(pointer_to_current(four) != NULL) {
+		rewind_queue(four);
+		peek_at_current(four, proc, 0);
+		ret = 1;
+		return ret;
+	}
+	else {
+		return ret;
+	}
+}
+
+int demotionCheck(Queue* one, Queue* two, Queue* three, Queue* four, Process* proc, Queue* currQ, Queue *nextQ) {
+
+	if(proc->PID == 0) {
+		return 0;
+	}
+
+	switch(proc->inWhichQueue) {
+		case 1:
+			currQ = &(*one);
+			nextQ = &(*two);
+			return 1;
+			break;
+		case 2:
+			currQ = &(*two);
+			nextQ = &(*three);
+			return 2;
+			break;
+		case 3:
+			currQ = &(*three);
+			nextQ = &(*four);
+			return 2;
+			break;
+		case 4:
+			currQ = &(*four);
+			nextQ = &(*four);
+			return -1;
+			break;
+		default:
+			printf("ERROR: process is lost.");
+			return -2;
+			break;
+	}
+}
+
+
