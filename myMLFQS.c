@@ -162,7 +162,7 @@ int main(int argc, char *argv[]) {
 	Process procExecuting = {0,0,0,0,0,0,0,0,0,0,0,0,VOID,0,0};
 	int pExecuting;
 	unsigned long clock=0; // Internal Scheduler Clock
-	while(processesExist(&notArrived,&blocked,&level1,&level2,&level3,&level4) && clock != 2000) {
+	while(processesExist(&notArrived,&blocked,&level1,&level2,&level3,&level4)) {
 
 		// Section 2.1: Handling arrival processes.
 		// I'm using Process "procArriving" to keep track of processes that are currently arriving
@@ -201,7 +201,7 @@ int main(int argc, char *argv[]) {
 				grabReadyProcess(&level1,&level2,&level3,&level4,&procExecuting);
 				//if(procExecuting.IORemaining != 0) {
 					printf("RUN: Process %lu started execution from level %d at time %lu ",
-										procExecuting.PID, procExecuting.inWhichQueue, clock);
+							procExecuting.PID, procExecuting.inWhichQueue, clock);
 					printf("wants to execute for %lu ticks. Repeat: %lu\n", 
 							procExecuting.burstRemaining, procExecuting.repeat);
 				//}
@@ -210,9 +210,13 @@ int main(int argc, char *argv[]) {
 					procExecuting.burstRemaining = procExecuting.burstRemaining - 1;
 					procExecuting.quantumRemaining--;
 					
-					if(procExecuting.quantumRemaining == 0) {
-						procExecuting.b++;
-					}
+				//	if(procExecuting.quantumRemaining == 0) {
+				//		procExecuting.b++;
+				//		procExecuting.quantumRemaining = procExecuting.quantum;
+						//printf("PID: %lu, BR: %lu Q: %d\n", 
+						//procExecuting.PID,procExecuting.burstRemaining,
+						//procExecuting.inWhichQueue);
+				//	}
 					// procExecuting.usageCPU++ or something... incorporate usage tracking.
 				}
 				// burst must be depleted, check if i/o needs to be done, if not then tick down repeat.
@@ -222,9 +226,24 @@ int main(int argc, char *argv[]) {
 						// and move them into the blocked queue.
 						printf("I/O: Process %lu blocked for I/O at time %lu.\n", 
 								procExecuting.PID, clock);		
-						procExecuting.state = BLOCKED;
 						add_to_queue(&blocked, &procExecuting, 0);
-						delete_current(&level1);
+						switch(procExecuting.inWhichQueue) {
+							case 1:
+								delete_current(&level1);
+								break;
+							case 2:
+								delete_current(&level2);
+								break;
+							case 3:
+								delete_current(&level3);
+								break;
+							case 4:
+								delete_current(&level4);
+								break;
+							default:
+								printf("ERROR: process is lost");
+								break;
+						}
 						procExecuting = nullProc;
 						
 					}
@@ -239,6 +258,7 @@ int main(int argc, char *argv[]) {
 
 						//else {
 							// no burst, io, or repeat left so terminate the process.
+							// multi level system cant just delete from level 1 fix it
 							printf("FINISHED: Process %lu finished at time %lu.\n",
 									procExecuting.PID, clock);
 							delete_current(&level1);
@@ -248,17 +268,26 @@ int main(int argc, char *argv[]) {
 					}
 				}
 			}
-			// If something is executing, then check if a higher priority process exists. (NOT IMPLEMENTED YET)
+			// If something is executing, then check if a higher priority process exists.
+			// (NOT IMPLEMENTED YET)
+			
 			// If not, then just tick down burst or IO or repeat.
 			else {
+				
+				//procExecuting = nullProc;
+				//grabReadyProcess(&level1, &level2, &level3, &level4, &procExecuting);
 				// Burst
 				if(procExecuting.burstRemaining > 0) {
 					procExecuting.burstRemaining = procExecuting.burstRemaining - 1;
 					procExecuting.quantumRemaining--;
 					
-					if(procExecuting.quantumRemaining == 0) {
-						procExecuting.b++;
-					}
+				//	if(procExecuting.quantumRemaining == 0) {
+				//		procExecuting.b++;
+				//		procExecuting.quantumRemaining = procExecuting.quantum;
+						//printf("PID: %lu, BR: %lu Q: %d\n", 
+						//procExecuting.PID,procExecuting.burstRemaining,
+						//procExecuting.inWhichQueue);
+				//	}
 				}
 
 				else {
@@ -268,7 +297,23 @@ int main(int argc, char *argv[]) {
 						printf("I/O: Process %lu blocked for I/O at time %lu.\n", 
 								procExecuting.PID, clock);
 						add_to_queue(&blocked, &procExecuting, 0);
-						delete_current(&level1);
+						switch(procExecuting.inWhichQueue) {
+							case 1:
+								delete_current(&level1);
+								break;
+							case 2:
+								delete_current(&level2);
+								break;
+							case 3:
+								delete_current(&level3);
+								break;
+							case 4:
+								delete_current(&level4);
+								break;
+							default:
+								printf("ERROR: process is lost");
+								break;
+						}
 						procExecuting = nullProc;
 					}
 					// No burst or IO, so check repeat
@@ -281,6 +326,8 @@ int main(int argc, char *argv[]) {
 						
 						//else {
 							// no burst, io, or repeat left so its terminated.
+							// multiqueue so cant just delete from level 1 fix this
+							printf("Hello");
 							printf("FINISHED: Process %lu finished at time %lu.\n",
 									procExecuting.PID, clock);
 							add_to_queue(&terminated, &procExecuting, 0);
@@ -309,10 +356,12 @@ int main(int argc, char *argv[]) {
 						curr->repeat = curr->repeat - 1;
 						curr->burstRemaining = curr->burst;
 						curr->IORemaining = curr->IO;
+						curr->quantumRemaining = curr->quantum;
 					}
 					else {
 						curr->repeat = curr->repeat - 1;
 						curr->burstRemaining = curr->burst;
+						curr->quantumRemaining = curr->quantum;
 					}
 
 					switch(curr->inWhichQueue) {
@@ -335,7 +384,7 @@ int main(int argc, char *argv[]) {
 					}
 					
 					delete_current(&blocked);
-
+					// rewind_queue(&blocked);
 				}
 				else {
 					//printf("%lu %lu %lu ", curr.PID, curr.burstRemaining, curr.IORemaining);
@@ -343,7 +392,7 @@ int main(int argc, char *argv[]) {
 					//printf("%lu %lu %lu\n", curr.PID, curr.burstRemaining, curr.IORemaining);	
 				}
 				
-				if(!empty_queue(&blocked)) {
+				if(!end_of_queue(&blocked)) {
 					next_element(&blocked);
 				}
 			}
@@ -361,6 +410,94 @@ int main(int argc, char *argv[]) {
 		/* 	delete_current(currQ); */
 		/* 	add_to_queue(nextQ,&procExecuting,0); */
 		/* } */
+		if(procExecuting.PID != 0) {
+			int countedUp = 0;
+			if(procExecuting.quantumRemaining == 0) {	
+				procExecuting.b++;
+				procExecuting.quantumRemaining = procExecuting.quantum;
+				countedUp++;
+			}
+			switch(procExecuting.inWhichQueue) {
+				case 1:
+					if(procExecuting.b == 1) {
+					 	printf("QUEUED: Process %lu queued at level %d at time %lu BR: %lu IOR: %lu.\n", 
+			 			procExecuting.PID, ++procExecuting.inWhichQueue, clock,
+						procExecuting.burstRemaining, procExecuting.IORemaining);
+						procExecuting.b = 0;
+						procExecuting.quantum = 30;
+					    	procExecuting.quantumRemaining = 30;	
+						rewind_queue(&level1);
+						add_to_queue(&level2, &procExecuting, 0);
+						delete_current(&level1);
+						procExecuting = nullProc;
+					}
+					break;
+				case 2:
+					//printf("PID: %lu, Q: %d B: %d\n", 
+					//procExecuting.PID,procExecuting.inWhichQueue,procExecuting.b);
+					if(procExecuting.b == 2) {
+						printf("QUEUED: Process %lu queued at level %d at time %lu.\n",
+						procExecuting.PID, ++procExecuting.inWhichQueue, clock);
+						procExecuting.b = 0;
+						procExecuting.quantum = 100;
+					    	procExecuting.quantumRemaining = 100;	
+						rewind_queue(&level2);
+						add_to_queue(&level3, &procExecuting, 0);
+						delete_current(&level2);
+						procExecuting = nullProc;
+					}
+					else if(countedUp) {
+						printf("QUEUED: Process %lu queued at level %d at time %lu.\n",
+						procExecuting.PID, procExecuting.inWhichQueue, clock);
+						rewind_queue(&level2);
+						delete_current(&level2);
+						add_to_queue(&level2, &procExecuting, 0);
+						procExecuting = nullProc;
+					}
+					break;
+				case 3:
+					if(procExecuting.b == 2) {
+						printf("QUEUED: Process %lu queued at level %d at time %lu.\n",
+						procExecuting.PID, ++procExecuting.inWhichQueue, clock);
+						procExecuting.b = 0;
+						procExecuting.quantum = 200;
+					    	procExecuting.quantumRemaining = 200;	
+						rewind_queue(&level3);
+						add_to_queue(&level4, &procExecuting, 0);
+						delete_current(&level3);
+						procExecuting = nullProc;
+					}
+					else if(countedUp) {
+						printf("QUEUED: Process %lu queued at level %d at time %lu.\n",
+						procExecuting.PID, procExecuting.inWhichQueue, clock);
+						rewind_queue(&level3);
+						delete_current(&level3);
+						add_to_queue(&level3, &procExecuting, 0);
+						procExecuting = nullProc;
+					}
+					break;
+				case 4:
+					if(countedUp) {
+						printf("QUEUED: Process %lu queued at level %d at time %lu.\n",
+						procExecuting.PID, procExecuting.inWhichQueue, clock);
+						rewind_queue(&level4);
+						delete_current(&level4);
+						add_to_queue(&level4, &procExecuting, 0);
+						procExecuting = nullProc;
+					}
+					break;
+				default:
+					printf("ERROR: process is lost.");
+					break;
+			}
+			
+		}
+
+		if(procExecuting.PID==0 && grabReadyProcess(&level1,&level2,&level3,&level4,&procExecuting)) {
+			printf("RUN: Process %lu started execution from level %d at time %lu ",
+					procExecuting.PID, procExecuting.inWhichQueue, clock);
+			printf("wants to execute for %lu.\n", procExecuting.burstRemaining);
+		}
 
 		clock++;
 	}
@@ -424,7 +561,7 @@ int main(int argc, char *argv[]) {
 int processesExist(Queue *a, Queue *b, Queue *one, Queue *two, Queue *three, Queue *four) {
 	
 	// Fix this, it needs !empty_queue(b)
-	if(!empty_queue(a) || !empty_queue(one) || !empty_queue(two) || !empty_queue(three) || !empty_queue(four)) {
+	if(!empty_queue(a) || !empty_queue(b) || !empty_queue(one) || !empty_queue(two) || !empty_queue(three) || !empty_queue(four)) {
 		return 1;
 	}
 	else {
