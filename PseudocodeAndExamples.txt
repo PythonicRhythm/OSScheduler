@@ -50,6 +50,15 @@ Process ticking in IO Buffer:
 
 Process Sidenotes:
 
+Implement a linked list type system for processes printed multiple time.
+(technically wasteful butt.... its cool! do it for fun.)
+
+[P1, P2, P3, P4, ...]
+	 ^^
+	 P3
+	 ^^
+	 P3
+
 If a process with the same id is inputted multiple times,
 it runs its burst->io->repeat but doesnt end on run, it ends
 on IO and then jumps to the other values of burst->IO->repeat
