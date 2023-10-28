@@ -1,0 +1,157 @@
+Example Scenarios:
+
+Process meeting quantum:
+	(Q = 10)
+	200 running
+	201 1000->999
+	202 999->998
+	203 998->997
+	204 997->996
+	205 996->995
+	206 995->994
+	207 994->993
+	208 993->992
+	209 992->991
+	210 991->990 process put into rear of queue or lower queue and queue message sent
+
+Process executing sent to IO:
+	(Burst = 5)
+	1700 running
+	1701 5->4
+	1702 4->3
+	1703 3->2
+	1704 2->1
+	1705 1->0 process sent to IO, IO message sent, run message sent for new process
+
+Process ticking in IO Buffer:
+	(IO = 20)
+	at time 13, process finished burst and was sent into IO buffer
+	13 20->19
+	14 19->18
+	15 18->17
+	16 17->16
+	17 16->15
+	18 15->14
+	19 14->13
+	20 13->12
+	21 12->11
+	22 11->10
+	23 10->9
+	24 9->8
+	25 8->7
+	26 7->6
+	27 6->5
+	28 5->4
+	29 4->3
+	30 3->2
+	31 2->1
+	32 1->0 sent into respective queue with no message
+	33 run message
+
+Process Sidenotes:
+
+If a process with the same id is inputted multiple times,
+it runs its burst->io->repeat but doesnt end on run, it ends
+on IO and then jumps to the other values of burst->IO->repeat
+EX: 
+	PID: 2120 Burst: 5   IO: 20 Repeat: 10
+	PID: 2120 Burst: 200 IO: 30 Repeat: 2
+	
+	How it would run:
+		B: 5   -> IO: 20	R: 10->9
+		B: 5   -> IO: 20	R: 9->8
+		B: 5   -> IO: 20	R: 8->7
+		B: 5   -> IO: 20	R: 7->6
+		B: 5   -> IO: 20	R: 6->5
+		B: 5   -> IO: 20	R: 5->4
+		B: 5   -> IO: 20	R: 4->3
+		B: 5   -> IO: 20	R: 3->2
+		B: 5   -> IO: 20	R: 2->1
+		B: 5   -> IO: 20	R: 1->0
+		B: 200 -> IO: 30	R: 2->1
+		B: 200 -> IO: 30   	R: 1->0
+		B: 200 -> FINISH
+		
+
+while(processes exist) {
+
+	Check for Arrivals: Completed
+
+	Execution:
+ 
+		if(no processes ready)
+			null++
+		else if(pid == 0)
+			grab new process and set it as executing process.
+			print(running process)
+		else {
+		
+			burst--;
+			quantumRemaning--;
+			check if(burst==0)
+
+				if(IOrem > 0)
+					if(proc.b == 0)
+						proc.g++;
+					else
+						proc.b = 0;
+					print(IO message)
+					move proc to buffer
+					procExecuting = nullproc
+				else
+					print(finished)
+					delete process (send to terminated)
+					procExecuting = nullProc
+
+			check if(quantumRem == 0)
+
+				proc.b++
+				proc.g = 0;
+				if(proc.b == queue.b)
+					
+					proc.inWhichQueue++;
+					print(queued) 
+					process is demoted and change 
+					  b, g, and quantum to match new level
+					delete from current queue
+					procExecuting = nullProc
+					
+				else
+					put at the rear of current queue
+
+			check if(proc.g == queue.g)
+				
+				proc.inWhichQueue++;
+				print(queued)
+				process is promoted and change b, g, and quantum
+				   to match new level
+				delete from current queue
+				procExecuting = nullProc
+			
+			if(procExecuting is null)
+				if(processes exist)
+					set process executing as highest level process
+					print(running)
+			else
+				if(higher level process exists)
+					print(queued) for the previously executing process
+					set proc executing as higher level process
+					print(running)
+		}
+
+	IO Buffer: {
+
+		for(every process in blocked)
+			proc.IOrem--;
+			if(proc.IOrem == 0)
+				proc.repeat--;
+				if(proc.repeat == 0)
+					reset burst
+				else
+					reset burst
+					reset IO
+				send process back to respective queue
+	}
+
+	clock++
+}
