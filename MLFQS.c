@@ -94,8 +94,7 @@ typedef struct Process {
 
 int processesExist(Queue*,Queue*,Queue*,Queue*,Queue*,Queue*);
 int readyProcess(Queue*,Queue*,Queue*,Queue*);
-int grabReadyProcess(Queue*, Queue*, Queue*, Queue*, Process*);
-int demotionCheck(Queue*,Queue*,Queue*,Queue*,Process*,Queue*,Queue*); 
+int grabReadyProcess(Queue*, Queue*, Queue*, Queue*, Process*); 
 
 int main(int argc, char *argv[]) {
 
@@ -608,39 +607,4 @@ int grabReadyProcess(Queue *one, Queue *two, Queue *three, Queue *four, Process 
 		return ret;
 	}
 }
-
-int demotionCheck(Queue* one, Queue* two, Queue* three, Queue* four, Process* proc, Queue* currQ, Queue *nextQ) {
-
-	if(proc->PID == 0) {
-		return 0;
-	}
-
-	switch(proc->inWhichQueue) {
-		case 1:
-			currQ = &(*one);
-			nextQ = &(*two);
-			return 1;
-			break;
-		case 2:
-			currQ = &(*two);
-			nextQ = &(*three);
-			return 2;
-			break;
-		case 3:
-			currQ = &(*three);
-			nextQ = &(*four);
-			return 2;
-			break;
-		case 4:
-			currQ = &(*four);
-			nextQ = &(*four);
-			return -1;
-			break;
-		default:
-			printf("ERROR: process is lost.");
-			return -2;
-			break;
-	}
-}
-
 
