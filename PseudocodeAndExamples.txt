@@ -54,10 +54,10 @@ Implement a linked list type system for processes printed multiple time.
 (technically wasteful butt.... its cool! do it for fun.)
 
 [P1, P2, P3, P4, ...]
-	 ^^
-	 P3
-	 ^^
-	 P3
+	 	 ^^
+		 P3
+		 ^^
+		 P3
 
 If a process with the same id is inputted multiple times,
 it runs its burst->io->repeat but doesnt end on run, it ends
@@ -81,6 +81,14 @@ EX:
 		B: 200 -> IO: 30   	R: 1->0
 		B: 200 -> FINISH
 		
+Process struct {
+	var
+	var
+	var
+	var
+	Process * nextBehavior
+}
+
 
 while(processes exist) {
 
