@@ -77,6 +77,7 @@ typedef struct Process {
 	unsigned long quantum;
 	unsigned long quantumRemaining;
 	unsigned long usageCPU;
+	int ready;
 	int inWhichQueue;
 	int b; // Demotion
 	int g; // Promotion
@@ -87,7 +88,17 @@ typedef struct Process {
 
 int processesExist(Queue*,Queue*,Queue*,Queue*,Queue*,Queue*);
 int readyProcess(Queue*,Queue*,Queue*,Queue*);
-int grabReadyProcess(Queue*, Queue*, Queue*, Queue*, Process*); 
+int grabReadyProcess(Queue*, Queue*, Queue*, Queue*, Process*);
+int pidCompare(Process*,Process*);
+
+int pidCompare(Process* p1, Process* p2) {
+	if(p1->PID > p2->PID)
+		return -1;
+	else if(p1->PID < p2->PID)
+		return 1;
+	else
+		return 0;
+}
 
 int main(int argc, char *argv[]) {
 
@@ -109,9 +120,11 @@ int main(int argc, char *argv[]) {
 	while (scanf("%lu %lu %lu %lu %lu", &(newP.arrivalTime), &(newP.PID), &(newP.burst), &(newP.IO), &(newP.repeat)) == 5) {
 		printf("Process #%lu with PID: %lu added with to the queue.\n", element, newP.PID);
 		//newP.burst; use this for setting priority based on burst times
+		newP.ready = 1;
 		newP.burstRemaining = newP.burst;
 		newP.IORemaining = newP.IO;
 		newP.nextSet = NULL;
+		newP.usageCPU = 0;
 		if(!empty_queue(&notArrived)) {
 			printf("newP: %lu prevP: %lu\n", newP.PID, prevP->PID);
 			if(newP.PID == prevP->PID) {
@@ -123,6 +136,7 @@ int main(int argc, char *argv[]) {
 				child->PID = newP.PID;
 				child->repeat = newP.repeat;
 				child->arrivalTime = newP.arrivalTime;
+				child->ready = newP.ready;
 				prevP->nextSet = child;
 				prevP = child;
 			}
@@ -205,6 +219,7 @@ int main(int argc, char *argv[]) {
 			printf("CREATE: Process %lu entered the ready queue at time %lu.\n", 
 					procArriving.PID, clock);
 			delete_current(&notArrived);
+			procArriving.ready = 1;
 			procArriving.quantum = 10;
 			procArriving.quantumRemaining = 10;
 			procArriving.inWhichQueue = 1;
@@ -239,8 +254,8 @@ int main(int argc, char *argv[]) {
 		else {
 			// tick burst and quantum.
 			procExecuting.burstRemaining--;
+			procExecuting.usageCPU++;
 			procExecuting.quantumRemaining--;
-			// procExecuting.usageCPU++ or something... incorporate usage tracking.
 			
 			// If burst is 0, check if IO needs to be done or process is finished
 			if(procExecuting.burstRemaining == 0) {
@@ -253,22 +268,30 @@ int main(int argc, char *argv[]) {
 						if(procExecuting.b == 0) {procExecuting.g++;}
 						else {procExecuting.b = 0;}
 					}
+					procExecuting.ready = 0;
 					procExecuting.quantumRemaining = procExecuting.quantum;
 					printf("I/O: Process %lu blocked for I/O at time %lu.\n", 
 						procExecuting.PID, clock);
 					add_to_queue(&blocked, &procExecuting, 0);
 					switch(procExecuting.inWhichQueue) {
 						case 1:
-							delete_current(&level1);
+							rewind_queue(&level1);
+							update_current(&level1,&procExecuting);
 							break;
 						case 2:
-							delete_current(&level2);
+							rewind_queue(&level2);
+							update_current(&level2,&procExecuting);
+							//delete_current(&level2);
 							break;
 						case 3:
-							delete_current(&level3);
+							rewind_queue(&level3);
+							update_current(&level3,&procExecuting);
+							//delete_current(&level3);
 							break;
 						case 4:
-							delete_current(&level4);
+							rewind_queue(&level4);
+							update_current(&level4,&procExecuting);
+							//delete_current(&level4);
 							break;
 						default:
 							printf("ERROR: process is lost\n");
@@ -460,19 +483,24 @@ int main(int argc, char *argv[]) {
 				Process temp;
 				grabReadyProcess(&level1,&level2,&level3,&level4,&temp);
 
-				if(procExecuting.inWhichQueue > temp.inWhichQueue) {
+				if(procExecuting.PID != temp.PID) 
+				//if(procExecuting.inWhichQueue > temp.inWhichQueue) 
+				{
 
 					printf("QUEUED: Process %lu queued at level %d at time %lu.\n",
 					procExecuting.PID, procExecuting.inWhichQueue, clock);
 					Process *adjustments = NULL;
 					switch(procExecuting.inWhichQueue) {
 						case 1:
+							// rewind_queue();
+							// updatingProcess(&level1, &processExecuting);
 							rewind_queue(&level1);
 							adjustments = pointer_to_current(&level1);
 							adjustments->burstRemaining = procExecuting.burstRemaining;
 							adjustments->b = procExecuting.b;
 							adjustments->g = procExecuting.g;
 							adjustments->quantumRemaining = procExecuting.quantumRemaining;
+							adjustments->usageCPU = procExecuting.usageCPU;
 							break;
 						case 2:
 							rewind_queue(&level2);
@@ -481,6 +509,7 @@ int main(int argc, char *argv[]) {
 							adjustments->b = procExecuting.b;
 							adjustments->g = procExecuting.g;
 							adjustments->quantumRemaining = procExecuting.quantumRemaining;
+							adjustments->usageCPU = procExecuting.usageCPU;
 							break;
 						case 3:
 							rewind_queue(&level3);
@@ -489,6 +518,7 @@ int main(int argc, char *argv[]) {
 							adjustments->b = procExecuting.b;
 							adjustments->g = procExecuting.g;
 							adjustments->quantumRemaining = procExecuting.quantumRemaining;
+							adjustments->usageCPU = procExecuting.usageCPU;
 							break;
 						case 4:
 							rewind_queue(&level4);
@@ -497,6 +527,7 @@ int main(int argc, char *argv[]) {
 							adjustments->b = procExecuting.b;
 							adjustments->g = procExecuting.g;
 							adjustments->quantumRemaining = procExecuting.quantumRemaining;
+							adjustments->usageCPU = procExecuting.usageCPU;
 							break;
 						default:
 							printf("ERROR: process is lost.\n");
@@ -572,10 +603,17 @@ int main(int argc, char *argv[]) {
 								curr->gLim = 1;
 								curr->quantum = 30;
 								curr->quantumRemaining = 30;
+								curr->ready=1;
 								add_to_queue(&level2, curr, 0);
+								if(element_in_queue(&level1,curr)) {
+									delete_current(&level1);
+								}
 							}
 							else {
-								add_to_queue(&level1, curr, 0);
+								curr->ready=1;
+								if(element_in_queue(&level1, curr)) {
+									update_current(&level1, curr);
+								}
 							}
 							break;
 						case 2:
@@ -588,7 +626,11 @@ int main(int argc, char *argv[]) {
 								curr->bLim = 1;
 								curr->quantum = 10;
 								curr->quantumRemaining = 10;
+								curr->ready=1;
 								add_to_queue(&level1, curr, 0);
+								if(element_in_queue(&level2, curr)) {
+									delete_current(&level2);
+								}
 							}
 							// Demotion
 							else if(curr->b == curr->bLim) {
@@ -599,10 +641,18 @@ int main(int argc, char *argv[]) {
 								curr->gLim = 2;
 								curr->quantum = 100;
 								curr->quantumRemaining = 100;
+								curr->ready=1;
 								add_to_queue(&level3, curr, 0);
+								if(element_in_queue(&level2, curr)) {
+									delete_current(&level2);
+								}
 							}
 							else {
-								add_to_queue(&level2, curr, 0);
+								curr->ready=1;
+								if(element_in_queue(&level2, curr)) {
+									update_current(&level2, curr);
+								}
+								//add_to_queue(&level2, curr, 0);
 							}
 							break;
 						case 3:
@@ -615,7 +665,11 @@ int main(int argc, char *argv[]) {
 								curr->bLim = 2;
 								curr->quantum = 30;
 								curr->quantumRemaining = 30;
+								curr->ready=1;
 								add_to_queue(&level2, curr, 0);
+								if(element_in_queue(&level3, curr)) {
+									delete_current(&level3);
+								}
 							}
 							// Demotion
 							else if(curr->b == curr->bLim) {
@@ -626,14 +680,22 @@ int main(int argc, char *argv[]) {
 								curr->gLim = 2;
 								curr->quantum = 200;
 								curr->quantumRemaining = 200;
+								curr->ready=1;
 								add_to_queue(&level4, curr, 0);
+								if(element_in_queue(&level3, curr)) {
+									delete_current(&level3);
+								}
 							}
 							else {
-								add_to_queue(&level3, curr, 0);
+								curr->ready=1;
+								if(element_in_queue(&level3, curr)) {
+									update_current(&level3, curr);
+								}
+								//add_to_queue(&level3, curr, 0);
 							}
 							break;
 						case 4:
-							// Promotion
+							// Promotion:
 							if(curr->g == curr->gLim) {
 								curr->inWhichQueue--;
 								curr->g = 0;
@@ -642,10 +704,18 @@ int main(int argc, char *argv[]) {
 								curr->bLim = 2;
 								curr->quantum = 100;
 								curr->quantumRemaining = 100;
+								curr->ready=1;
 								add_to_queue(&level3, curr, 0);
+								if(element_in_queue(&level4, curr)) {
+									delete_current(&level4);
+								}
 							}
 							else {
-								add_to_queue(&level4, curr, 0);
+								curr->ready=1;
+								if(element_in_queue(&level4, curr)) {
+									update_current(&level4, curr);
+								}
+								//add_to_queue(&level4, curr, 0);
 							}
 							break;
 						default:
@@ -727,7 +797,6 @@ int main(int argc, char *argv[]) {
 
 int processesExist(Queue *a, Queue *b, Queue *one, Queue *two, Queue *three, Queue *four) {
 	
-	// Fix this, it needs !empty_queue(b)
 	if(!empty_queue(a) || !empty_queue(b) || !empty_queue(one) || !empty_queue(two) || !empty_queue(three) || !empty_queue(four)) {
 		return 1;
 	}
@@ -738,12 +807,51 @@ int processesExist(Queue *a, Queue *b, Queue *one, Queue *two, Queue *three, Que
 
 int readyProcess(Queue *one, Queue *two, Queue *three, Queue *four) {
 	
-	if(!empty_queue(one) || !empty_queue(two) || !empty_queue(three) || !empty_queue(four)) {
-		return 1;
+	rewind_queue(one);
+	while(pointer_to_current(one) != NULL) {
+		if(((Process *)pointer_to_current(one))->ready == 1) {
+			return 1;
+		}
+		else {
+			next_element(one);
+		}
+	} 
+	rewind_queue(two);
+	while(pointer_to_current(two) != NULL) {
+		if(((Process *)pointer_to_current(two))->ready == 1) {
+			return 1;
+		}
+		else {
+			next_element(two);
+		}
 	}
-	else {
-		return 0;
+	rewind_queue(three);
+	while(pointer_to_current(three) != NULL) {
+		if(((Process *)pointer_to_current(three))->ready == 1) {
+			return 1;
+		}
+		else {
+			next_element(three);
+		}
 	}
+	rewind_queue(four);
+	while(pointer_to_current(four) != NULL) {
+		if(((Process *)pointer_to_current(four))->ready == 1) {
+			return 1;
+		}
+		else {
+			next_element(four);
+		}
+	}
+
+	return 0;
+
+	// if(!empty_queue(one) || !empty_queue(two) || !empty_queue(three) || !empty_queue(four)) {
+	// 	return 1;
+	// }
+	// else {
+	// 	return 0;
+	// }
 
 }
 
@@ -751,32 +859,84 @@ int readyProcess(Queue *one, Queue *two, Queue *three, Queue *four) {
 int grabReadyProcess(Queue *one, Queue *two, Queue *three, Queue *four, Process *proc) {
 
 	int ret = 0;
-	if(pointer_to_current(one) != NULL) {
-		rewind_queue(one);
-		peek_at_current(one, proc, 0);
-		ret = 1;
-		return ret;
+	rewind_queue(one);
+	while(pointer_to_current(one) != NULL) {
+		if(((Process *)pointer_to_current(one))->ready == 1) {
+			peek_at_current(one, proc, 0);
+			ret = 1;
+			return ret;
+		}
+		else {
+			next_element(one);
+		}
 	}
-	else if(pointer_to_current(two) != NULL) {		
-		rewind_queue(two);
-		peek_at_current(two, proc, 0);
-		ret = 1;
-		return ret;
+
+	rewind_queue(two);
+	while(pointer_to_current(two) != NULL) {
+		if(((Process *)pointer_to_current(two))->ready == 1) {
+			peek_at_current(two, proc, 0);
+			ret = 1;
+			return ret;
+		}
+		else {
+			next_element(two);
+		}
 	}
-	else if(pointer_to_current(three) != NULL) {
-		rewind_queue(three);
-		peek_at_current(three, proc, 0);
-		ret = 1;
-		return ret;
+
+	rewind_queue(three);
+	while(pointer_to_current(three) != NULL) {
+		if(((Process *)pointer_to_current(three))->ready == 1) {
+			peek_at_current(three, proc, 0);
+			ret = 1;
+			return ret;
+		}
+		else {
+			next_element(three);
+		}
 	}
-	else if(pointer_to_current(four) != NULL) {
-		rewind_queue(four);
-		peek_at_current(four, proc, 0);
-		ret = 1;
-		return ret;
+
+	rewind_queue(four);
+	while(pointer_to_current(four) != NULL) {
+		if(((Process *)pointer_to_current(four))->ready == 1) {
+			peek_at_current(four, proc, 0);
+			ret = 1;
+			return ret;
+		}
+		else {
+			next_element(four);
+		}
 	}
-	else {
-		return ret;
-	}
+
+	return ret;
+
+
+	// int ret = 0;
+	// if(pointer_to_current(one) != NULL) {
+	// 	rewind_queue(one);
+	// 	peek_at_current(one, proc, 0);
+	// 	ret = 1;
+	// 	return ret;
+	// }
+	// else if(pointer_to_current(two) != NULL) {		
+	// 	rewind_queue(two);
+	// 	peek_at_current(two, proc, 0);
+	// 	ret = 1;
+	// 	return ret;
+	// }
+	// else if(pointer_to_current(three) != NULL) {
+	// 	rewind_queue(three);
+	// 	peek_at_current(three, proc, 0);
+	// 	ret = 1;
+	// 	return ret;
+	// }
+	// else if(pointer_to_current(four) != NULL) {
+	// 	rewind_queue(four);
+	// 	peek_at_current(four, proc, 0);
+	// 	ret = 1;
+	// 	return ret;
+	// }
+	// else {
+	// 	return ret;
+	// }
 }
 

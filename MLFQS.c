@@ -76,7 +76,7 @@ typedef struct Process {
 	unsigned long IORemaining;		// IO remaining till unblocked.
 	unsigned long quantum;			// Max quantum based on queue the process is in.
 	unsigned long quantumRemaining;	// Quantum remaining till hit 0, if 0 then quantum burned
-	unsigned long usageCPU;			// Used to track usage of CPU
+	unsigned long usageCPU;			// Used to track usage of CPU.
 	int inWhichQueue;				// keeps number of the queue the process is in.
 	int b; 							// Demotion
 	int g; 							// Promotion
@@ -184,8 +184,8 @@ int main(int argc, char *argv[]) {
 	init_queue(&level3, sizeof(Process), TRUE, FALSE, FALSE);
 	init_queue(&level4, sizeof(Process), TRUE, FALSE, FALSE);
 	init_queue(&terminated, sizeof(Process), TRUE, FALSE, FALSE);
-	Process nullProc = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
-	Process procExecuting = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+	Process nullProc = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+	Process procExecuting = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 	unsigned long clock=0; // Internal Scheduler Clock
 	while(processesExist(&notArrived,&blocked,&level1,&level2,&level3,&level4)) {
 
@@ -239,7 +239,7 @@ int main(int argc, char *argv[]) {
 			// tick burst and quantum.
 			procExecuting.burstRemaining--;
 			procExecuting.quantumRemaining--;
-			// procExecuting.usageCPU++ or something... incorporate usage tracking.
+			procExecuting.usageCPU++;
 			
 			// If burst is 0, check if IO needs to be done or process is finished
 			if(procExecuting.burstRemaining == 0) {
@@ -471,6 +471,7 @@ int main(int argc, char *argv[]) {
 							adjustments->b = procExecuting.b;
 							adjustments->g = procExecuting.g;
 							adjustments->quantumRemaining = procExecuting.quantumRemaining;
+							adjustments->usageCPU = procExecuting.usageCPU;
 							break;
 						case 2:
 							adjustments = pointer_to_current(&level2);
@@ -478,6 +479,7 @@ int main(int argc, char *argv[]) {
 							adjustments->b = procExecuting.b;
 							adjustments->g = procExecuting.g;
 							adjustments->quantumRemaining = procExecuting.quantumRemaining;
+							adjustments->usageCPU = procExecuting.usageCPU;
 							break;
 						case 3:
 							adjustments = pointer_to_current(&level3);
@@ -485,6 +487,7 @@ int main(int argc, char *argv[]) {
 							adjustments->b = procExecuting.b;
 							adjustments->g = procExecuting.g;
 							adjustments->quantumRemaining = procExecuting.quantumRemaining;
+							adjustments->usageCPU = procExecuting.usageCPU;
 							break;
 						case 4:
 							adjustments = pointer_to_current(&level4);
@@ -492,6 +495,7 @@ int main(int argc, char *argv[]) {
 							adjustments->b = procExecuting.b;
 							adjustments->g = procExecuting.g;
 							adjustments->quantumRemaining = procExecuting.quantumRemaining;
+							adjustments->usageCPU = procExecuting.usageCPU;
 							break;
 						default:
 							printf("ERROR: process is lost.\n");
@@ -661,41 +665,46 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
+		if(!processesExist(&notArrived,&blocked,&level1,&level2,&level3,&level4)) {
+			break;
+		}
+
 		clock++;
 	}
 
-	printf("\n[*] Scheduler shutdown at time %lu.\n", clock);
+	printf("\nScheduler shutdown at time %lu.\n", clock);
 	
 	// END OF SECTION 2
 
 	// WILL BE REMOVED JUST CHECKING IF ANY PROCESSES ARE PASSING THROUGH.
 	// THERE SHOULD BE NOTHING IN THE LEVEL 1 QUEUE.
-	printf("\n[*] Printing Level 1 Queue... (should be nothing below)\n");
-	element=1;
-	rewind_queue(&level1);
-	while (!end_of_queue(&level1)) {
-		printf("Element: %lu PID: %lu Time: %lu Priority: %d\n",
-				element++,
-				((Process *) pointer_to_current(&level1))->PID,
-				((Process *) pointer_to_current(&level1))->arrivalTime,
-				current_priority(&level1));
-		next_element(&level1);
-	}
+
+	// printf("\n[*] Printing Level 1 Queue... (should be nothing below)\n");
+	// element=1;
+	// rewind_queue(&level1);
+	// while (!end_of_queue(&level1)) {
+	// 	printf("Element: %lu PID: %lu Time: %lu Priority: %d\n",
+	// 			element++,
+	// 			((Process *) pointer_to_current(&level1))->PID,
+	// 			((Process *) pointer_to_current(&level1))->arrivalTime,
+	// 			current_priority(&level1));
+	// 	next_element(&level1);
+	// }
 	
-	// WILL BE REMOVED JUST CHECKING IF ALL THE PROCESSES LEFT THE BLOCKED QUEUE/STATE
-	// SHOULD CONTAIN NO PROCESSES
-	printf("\n[*] Printing Blocked Queue...\n");
-	element=1;
-	rewind_queue(&blocked);
-	while (!end_of_queue(&blocked)) {
-		printf("Element: %lu PID: %lu Time: %lu I/O Remain: %lu I/O: %lu\n",
-				element++,
-				((Process *) pointer_to_current(&blocked))->PID,
-				((Process *) pointer_to_current(&blocked))->arrivalTime,
-				((Process *) pointer_to_current(&blocked))->IORemaining,
-				((Process *) pointer_to_current(&blocked))->IO);
-		next_element(&blocked);
-	}
+	// // WILL BE REMOVED JUST CHECKING IF ALL THE PROCESSES LEFT THE BLOCKED QUEUE/STATE
+	// // SHOULD CONTAIN NO PROCESSES
+	// printf("\n[*] Printing Blocked Queue...\n");
+	// element=1;
+	// rewind_queue(&blocked);
+	// while (!end_of_queue(&blocked)) {
+	// 	printf("Element: %lu PID: %lu Time: %lu I/O Remain: %lu I/O: %lu\n",
+	// 			element++,
+	// 			((Process *) pointer_to_current(&blocked))->PID,
+	// 			((Process *) pointer_to_current(&blocked))->arrivalTime,
+	// 			((Process *) pointer_to_current(&blocked))->IORemaining,
+	// 			((Process *) pointer_to_current(&blocked))->IO);
+	// 	next_element(&blocked);
+	// }
 
 	// WILL BE REMOVED JUST CHECKING IF ALL THE PROCESSES REACHED THE TERMINATED QUEUE/STATE
 	// SHOULD CONTAIN ALL PROCESSES
