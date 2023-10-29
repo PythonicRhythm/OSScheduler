@@ -4,15 +4,15 @@
 #include "prioque.h"
 
 // ANTHONY ALVAREZ (89-9962639)
-// myMLFQS will simulate a four-level multi-level feedback queue scheduler.
+// MLFQS.C will simulate a four-level multi-level feedback queue scheduler.
 // Each queue in the scheduler should use a Round Robin schedule.
 
-// QUANTUM LAYOUT FOR LEVELS:
+// QUANTUM, GOOD, AND BAD LAYOUT FOR ALL LEVELS
 // 
-// First level, low quantum for I/O-bound processes. 	(Round Robin) 
-// Second level, medium quantum. 			(Round Robin)
-// Third level, higher quantum. 			(Round Robin)
-// Fourth level, highest quantum.			(Round Robin)
+// First level,  "q" = 10 | "b" = 1  | "g" = inf 	(Round Robin) 
+// Second level, "q" = 30 | "b" = 2  | "g" = 1 		(Round Robin)
+// Third level,  "q" = 100| "b" = 2  | "g" = 2		(Round Robin)
+// Fourth level, "q" = 200| "b" = inf| "g" = 2		(Round Robin)
 
 // FOUR-LEVEL PRIORTY SCHEME:
 // 
@@ -49,70 +49,86 @@
 // row, to be promoted. So the "g" can't be reset when the process does an I/O,
 // or you can't track this.
 
-// "q", "b", "g" of each level
-//
-// Level 1 Ultra High:	"q" = 10  | "b" = 1   | "g" = inf
-// Level 2 High:	"q" = 30  | "b" = 2   | "g" = 1
-// Level 3 Medium: 	"q" = 100 | "b" = 2   | "g" = 2
-// Level 4 Lowest:	"q" = 200 | "b" = inf | "g" = 2
-
-// For a visual of the MLFQS look at the first diagram given in the Assignment #2 PDF
-
-// THE NULL PROCESS SITUATION:
-// When the scheduler begins, the time should be 0. Whenever there is no process
-// to schedule (all processes are doing I/O or no processes exist), a special
-// process called the "null" process should execute. The scheduler should continue
-// to increment its clock during the execution of the null process, waiting
-// for another process to become ready. Your scheduler should exit when all processes
-// from the input have been executed completely.
-
+// This Process Struct will represent a "process" in the CPU Scheduler.
+// The struct will keep track of its Burst, IO, repeat, and more while
+// also keeping track of the limits of each g, b, and quantum based on
+// the level it exists in.
 typedef struct Process {
-	unsigned long arrivalTime;		// 1st input
-	unsigned long PID; 				// 2nd input
-	unsigned long burst;			// 3rd input
-	unsigned long IO;				// 4th input
-	unsigned long repeat;			// 5th input
-	unsigned long burstRemaining;	// Burst remaining till IO.
-	unsigned long IORemaining;		// IO remaining till unblocked.
-	unsigned long quantum;			// Max quantum based on queue the process is in.
-	unsigned long quantumRemaining;	// Quantum remaining till hit 0, if 0 then quantum burned
-	unsigned long usageCPU;			// Used to track usage of CPU.
-	int inWhichQueue;				// keeps number of the queue the process is in.
-	int b; 							// Demotion
-	int g; 							// Promotion
-	int bLim;						// Max b till demotion
-	int gLim;						// Max g till promotion 
-	struct Process * nextSet;
+	unsigned long arrivalTime;		// When process should be inserted into scheduler.
+	unsigned long PID; 				// Process Identification Number
+	unsigned long burst;			// The amount of CPU it wants to use in a specific run phase.
+	unsigned long IO;				// The amount of IO it wants to do in a specific IO phase.
+	unsigned long repeat;			// The amount of times it repeats [RUN -> IO] phases.
+	unsigned long burstRemaining;	// The amount of burst remaining till it needs to go to IO Phase.
+	unsigned long IORemaining;		// The amount of IO remaining till it ticks down repeat.
+	unsigned long quantum;			// The maximum quantum based on the queue the process is in.
+	unsigned long quantumRemaining;	// The amount of quantum remaining till its considered a bad behavior.
+	unsigned long usageCPU;			// Used to track the usage of CPU. 
+	int inWhichQueue;				// Keeps track of which Queue the process is in.
+	int b; 							// Demotion counter.
+	int g; 							// Promotion counter.
+	int bLim;						// Max "b" till demotion
+	int gLim;						// Max "g" till promotion 
+	struct Process * nextSet;		// Further Explanation below..
 } Process;
 
-int processesExist(Queue*,Queue*,Queue*,Queue*,Queue*,Queue*);
-int readyProcess(Queue*,Queue*,Queue*,Queue*);
-int grabReadyProcess(Queue*, Queue*, Queue*, Queue*, Process*); 
+// Further Explanation on nextSet:
+//
+// The process pointer allows for duplicate processes to be
+// part of a linked list. When multiple behaviors with the
+// same PID arrive, they are linked to each other and when
+// one behavior finished it rewrites the first element with
+// the second elements behavior and points to the third one.
+//
+// Queue level1: [P1, P2, P3, P4, ....]
+//						  ^^
+//						  P3
+//						  ^^
+//						  P3
+
+// FUTURE CORRECTIONS:
+// 
+// This might make me lost points but... my IO is incorrect.
+// Processes are kicked out of their queue when its IO time.
+// They are supposed to keep their spot and then return but
+// I found out too late so my structure is incorrect.
+//
+// TODO: Processes keep their spot when they reach IO phase instead of getting kicked off.
+// TODO: After grading, change output to be more visually clear.
+// TODO: Create more methods for tasks that i've copied a million times.
+
+// ALL FUNCTION DECLARATIONS
+// go to actual methods for better explanation of use.
+int processesExist();
+int readyProcessExists(Queue*,Queue*,Queue*,Queue*);
+int grabReadyProcess(Queue*, Queue*, Queue*, Queue*, Process*);
+void init_all_queues();
+
+// ALL GLOBAL VARIABLES OR STRUCTS
+Queue notArrived;
+Queue blocked;
+Queue level1;
+Queue level2;
+Queue level3;
+Queue level4;
+Queue terminated;
+unsigned long element;
 
 int main(int argc, char *argv[]) {
 
-	// SECTION 1: THIS SECTION IS INPUT READING (1.1) AND TESTING (1.2) IF THE PROCESSES WERE READ.
-	// NOTE: test needs to be removed by turn in date.	
-
 	// Initializing Queues.
-	Queue notArrived;
-	unsigned long element;
-	init_queue(&notArrived, sizeof(Process), TRUE, FALSE, FALSE);  
+	init_all_queues();
 
 	// Section 1.1:
 	// While loop that gathers all input, turns it into processes and puts them in queue.
-	// This needs to be fixed, try using the strsep() from Strings.c in scantrons.
-	printf("[*] Expecting input: \n");
 	element=1;
 	Process newP;
 	Process *prevP;
 	while (scanf("%lu %lu %lu %lu %lu", &(newP.arrivalTime), &(newP.PID), &(newP.burst), &(newP.IO), &(newP.repeat)) == 5) {
-		printf("Process #%lu with PID: %lu added with to the queue.\n", element, newP.PID);
 		newP.burstRemaining = newP.burst;
 		newP.IORemaining = newP.IO;
 		newP.nextSet = NULL;
 		if(!empty_queue(&notArrived)) {
-			printf("newP: %lu prevP: %lu\n", newP.PID, prevP->PID);
 			if(newP.PID == prevP->PID) {
 				Process* child = (Process *) malloc(sizeof(Process));
 				child->burst = newP.burst;
@@ -143,47 +159,11 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	// Section 1.2:
-	// Incorporate a while loop that prints all processes from queue (Just for testing must be removed by turn in).
-	element=0;
-	rewind_queue(&notArrived);
-	printf("\n");
-	printf("[*] Queue contains:\n");
-	while (!end_of_queue(&notArrived)) {
-		Process *curr = ((Process *) pointer_to_current(&notArrived));
-		printf("Element: %lu PID: %lu Time: %lu\n",
-				++element, 
-				curr->PID,
-				curr->arrivalTime);
-		while(curr->nextSet != NULL) {
-			printf("Child PID: %lu\n", curr->nextSet->PID);
-			curr = curr->nextSet;
-		}
-		next_element(&notArrived);
-	}
-
-	printf("\n");
-
+	free(prevP);
+	prevP = NULL;
 	
-	// END OF SECTION 1
 	
-	// SECTION 2: CREATING THE SCHEDULERS HIGH-LEVEL STRUCTURE (basic attempt)
-	// 2.1: HANDLES ARRIVALS | 2.2: HANDLES EXECUTING | 2.3 HANDLES IO/PROMOTION/DEMOTION/EXIT (NOT DONE) 
-	// Change all peek_at_current to pointer_to_current	
-	printf("[*] Entering High Level Queue....\n");
 
-	Queue blocked;
-	Queue level1;
-	Queue level2;
-	Queue level3;
-	Queue level4;
-	Queue terminated;
-	init_queue(&blocked, sizeof(Process), TRUE, FALSE, FALSE);
-	init_queue(&level1, sizeof(Process), TRUE, FALSE, FALSE);
-	init_queue(&level2, sizeof(Process), TRUE, FALSE, FALSE);
-	init_queue(&level3, sizeof(Process), TRUE, FALSE, FALSE);
-	init_queue(&level4, sizeof(Process), TRUE, FALSE, FALSE);
-	init_queue(&terminated, sizeof(Process), TRUE, FALSE, FALSE);
 	Process nullProc = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 	Process procExecuting = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 	unsigned long clock=0; // Internal Scheduler Clock
@@ -222,7 +202,7 @@ int main(int argc, char *argv[]) {
 
 		// Section 2.2: Handles choosing process to execute.
 		// If empty, null process will tick.
-		if(!readyProcess(&level1,&level2,&level3,&level4)) {
+		if(!readyProcessExists(&level1,&level2,&level3,&level4)) {
 			nullProc.usageCPU = nullProc.usageCPU + 1;
 		}
 		// If no process running but there exists some ready
@@ -440,7 +420,7 @@ int main(int argc, char *argv[]) {
 			// check if there exists ready process and set it as executing process.
 			if(procExecuting.PID == 0) {
 
-				if(readyProcess(&level1,&level2,&level3,&level4)) {
+				if(readyProcessExists(&level1,&level2,&level3,&level4)) {
 
 					grabReadyProcess(&level1,&level2,&level3,&level4,&procExecuting);
 					printf("RUN: Process %lu started execution from level %d at time %lu; ",
@@ -561,8 +541,10 @@ int main(int argc, char *argv[]) {
 					}
 
 					switch(curr->inWhichQueue) {
+
 						case 1:
-							// Demotion
+							// Demotion of process from Level 1 -> 2
+							// Put at rear.
 							if(curr->b == curr->bLim) {
 								curr->inWhichQueue++;
 								curr->b = 0;
@@ -573,12 +555,15 @@ int main(int argc, char *argv[]) {
 								curr->quantumRemaining = 30;
 								add_to_queue(&level2, curr, 0);
 							}
+							// Process returns to level 1 at the rear.
 							else {
 								add_to_queue(&level1, curr, 0);
 							}
 							break;
+
 						case 2:
-							// Promotion
+							// Promotion of process from Level 2 -> 1
+							// Put at rear.
 							if(curr->g == curr->gLim) {
 								curr->inWhichQueue--;
 								curr->g = 0;
@@ -589,7 +574,8 @@ int main(int argc, char *argv[]) {
 								curr->quantumRemaining = 10;
 								add_to_queue(&level1, curr, 0);
 							}
-							// Demotion
+							// Demotion of process from Level 2 -> 3
+							// Put at rear.
 							else if(curr->b == curr->bLim) {
 								curr->inWhichQueue++;
 								curr->b = 0;
@@ -600,12 +586,15 @@ int main(int argc, char *argv[]) {
 								curr->quantumRemaining = 100;
 								add_to_queue(&level3, curr, 0);
 							}
+							// Process returns to level 2 at the rear.
 							else {
 								add_to_queue(&level2, curr, 0);
 							}
 							break;
+
 						case 3:
-							// Promotion
+							// Promotion of process from Level 3 -> 2
+							// Put at rear.
 							if(curr->g == curr->gLim) {
 								curr->inWhichQueue--;
 								curr->g = 0;
@@ -616,7 +605,8 @@ int main(int argc, char *argv[]) {
 								curr->quantumRemaining = 30;
 								add_to_queue(&level2, curr, 0);
 							}
-							// Demotion
+							// Demotion of process form Level 3 -> 4
+							// Put at rear.
 							else if(curr->b == curr->bLim) {
 								curr->inWhichQueue++;
 								curr->b = 0;
@@ -627,12 +617,15 @@ int main(int argc, char *argv[]) {
 								curr->quantumRemaining = 200;
 								add_to_queue(&level4, curr, 0);
 							}
+							// Process returns to level 3 at the rear.
 							else {
 								add_to_queue(&level3, curr, 0);
 							}
 							break;
+
 						case 4:
-							// Promotion
+							// Promotion of process from Level 4 -> 3
+							// Put at rear.
 							if(curr->g == curr->gLim) {
 								curr->inWhichQueue--;
 								curr->g = 0;
@@ -643,14 +636,18 @@ int main(int argc, char *argv[]) {
 								curr->quantumRemaining = 100;
 								add_to_queue(&level3, curr, 0);
 							}
+							// Process returns to level 4 at the rear.
 							else {
 								add_to_queue(&level4, curr, 0);
 							}
 							break;
+
 						default:
+							// If process isn't in Q 1->4, they are lost.
 							printf("ERROR: lost track of where process belonged");
 							exit(0);
 							break;
+
 					}
 					
 					delete_current(&blocked);
@@ -665,6 +662,7 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
+		// If the last process finished its execution, close the scheduler, we are done!
 		if(!processesExist(&notArrived,&blocked,&level1,&level2,&level3,&level4)) {
 			break;
 		}
@@ -674,37 +672,7 @@ int main(int argc, char *argv[]) {
 
 	printf("\nScheduler shutdown at time %lu.\n", clock);
 	
-	// END OF SECTION 2
-
-	// WILL BE REMOVED JUST CHECKING IF ANY PROCESSES ARE PASSING THROUGH.
-	// THERE SHOULD BE NOTHING IN THE LEVEL 1 QUEUE.
-
-	// printf("\n[*] Printing Level 1 Queue... (should be nothing below)\n");
-	// element=1;
-	// rewind_queue(&level1);
-	// while (!end_of_queue(&level1)) {
-	// 	printf("Element: %lu PID: %lu Time: %lu Priority: %d\n",
-	// 			element++,
-	// 			((Process *) pointer_to_current(&level1))->PID,
-	// 			((Process *) pointer_to_current(&level1))->arrivalTime,
-	// 			current_priority(&level1));
-	// 	next_element(&level1);
-	// }
 	
-	// // WILL BE REMOVED JUST CHECKING IF ALL THE PROCESSES LEFT THE BLOCKED QUEUE/STATE
-	// // SHOULD CONTAIN NO PROCESSES
-	// printf("\n[*] Printing Blocked Queue...\n");
-	// element=1;
-	// rewind_queue(&blocked);
-	// while (!end_of_queue(&blocked)) {
-	// 	printf("Element: %lu PID: %lu Time: %lu I/O Remain: %lu I/O: %lu\n",
-	// 			element++,
-	// 			((Process *) pointer_to_current(&blocked))->PID,
-	// 			((Process *) pointer_to_current(&blocked))->arrivalTime,
-	// 			((Process *) pointer_to_current(&blocked))->IORemaining,
-	// 			((Process *) pointer_to_current(&blocked))->IO);
-	// 	next_element(&blocked);
-	// }
 
 	// WILL BE REMOVED JUST CHECKING IF ALL THE PROCESSES REACHED THE TERMINATED QUEUE/STATE
 	// SHOULD CONTAIN ALL PROCESSES
@@ -729,10 +697,25 @@ int main(int argc, char *argv[]) {
 
 }
 
-int processesExist(Queue *a, Queue *b, Queue *one, Queue *two, Queue *three, Queue *four) {
+// init_all_queues() will initialize all the queues that we will
+// be using for the scheduler.
+void init_all_queues() {
+	init_queue(&notArrived, sizeof(Process), TRUE, FALSE, FALSE);
+	init_queue(&blocked, sizeof(Process), TRUE, FALSE, FALSE);
+	init_queue(&level1, sizeof(Process), TRUE, FALSE, FALSE);
+	init_queue(&level2, sizeof(Process), TRUE, FALSE, FALSE);
+	init_queue(&level3, sizeof(Process), TRUE, FALSE, FALSE);
+	init_queue(&level4, sizeof(Process), TRUE, FALSE, FALSE);
+	init_queue(&terminated, sizeof(Process), TRUE, FALSE, FALSE);
+}
+
+// processesExist() checks if atleast one process exists in
+// all queues that the scheduler uses. This makes sure the scheduler
+// doesn't close early because of not seeing a future arrival or blocked process.
+// Returns 1 if TRUE, 0 if FALSE.
+int processesExist() {
 	
-	// Fix this, it needs !empty_queue(b)
-	if(!empty_queue(a) || !empty_queue(b) || !empty_queue(one) || !empty_queue(two) || !empty_queue(three) || !empty_queue(four)) {
+	if(!empty_queue(&notArrived) || !empty_queue(&blocked) || !empty_queue(&level1) || !empty_queue(&level2) || !empty_queue(&level3) || !empty_queue(&level4)) {
 		return 1;
 	}
 	else {
@@ -740,7 +723,10 @@ int processesExist(Queue *a, Queue *b, Queue *one, Queue *two, Queue *three, Que
 	}
 }
 
-int readyProcess(Queue *one, Queue *two, Queue *three, Queue *four) {
+// readyProcessExists() checks if level 1-4 queues contain
+// any processes that are ready for execution. 
+// Returns 1 if TRUE, 0 if FALSE. 
+int readyProcessExists(Queue *one, Queue *two, Queue *three, Queue *four) {
 	
 	if(!empty_queue(one) || !empty_queue(two) || !empty_queue(three) || !empty_queue(four)) {
 		return 1;
@@ -751,7 +737,10 @@ int readyProcess(Queue *one, Queue *two, Queue *three, Queue *four) {
 
 }
 
-// Grabs a ready process from the highest to lowest queue.
+// grabReadyProcess() grabs the highest level process that
+// is currently ready. It copies the data from the ready
+// process to Process *proc.
+// Returns 1 if it grabbed a ready process, 0 if it did not.
 int grabReadyProcess(Queue *one, Queue *two, Queue *three, Queue *four, Process *proc) {
 
 	int ret = 0;
