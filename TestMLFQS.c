@@ -67,21 +67,21 @@
 // from the input have been executed completely.
 
 typedef struct Process {
-	unsigned long arrivalTime;		// 1st input
-	unsigned long PID; 				// 2nd input
-	unsigned long burst;			// 3rd input
-	unsigned long IO;				// 4th input
-	unsigned long repeat;			// 5th input
-	unsigned long burstRemaining;	// Burst remaining till IO.
-	unsigned long IORemaining;		// IO remaining till unblocked.
-	unsigned long quantum;			// Max quantum based on queue the process is in.
-	unsigned long quantumRemaining;	// Quantum remaining till hit 0, if 0 then quantum burned
-	unsigned long usageCPU;			// Used to track usage of CPU
-	int inWhichQueue;				// keeps number of the queue the process is in.
-	int b; 							// Demotion
-	int g; 							// Promotion
-	int bLim;						// Max b till demotion
-	int gLim;						// Max g till promotion 
+	unsigned long arrivalTime;	// 1st input
+	unsigned long PID; 		// 2nd input
+	unsigned long burst;		// 3rd input
+	unsigned long IO;		// 4th input
+	unsigned long repeat;		// 5th input
+	unsigned long burstRemaining;
+	unsigned long IORemaining;
+	unsigned long quantum;
+	unsigned long quantumRemaining;
+	unsigned long usageCPU;
+	int inWhichQueue;
+	int b; // Demotion
+	int g; // Promotion
+	int bLim;
+	int gLim;
 	struct Process * nextSet;
 } Process;
 
@@ -108,6 +108,7 @@ int main(int argc, char *argv[]) {
 	Process *prevP;
 	while (scanf("%lu %lu %lu %lu %lu", &(newP.arrivalTime), &(newP.PID), &(newP.burst), &(newP.IO), &(newP.repeat)) == 5) {
 		printf("Process #%lu with PID: %lu added with to the queue.\n", element, newP.PID);
+		//newP.burst; use this for setting priority based on burst times
 		newP.burstRemaining = newP.burst;
 		newP.IORemaining = newP.IO;
 		newP.nextSet = NULL;
@@ -466,6 +467,7 @@ int main(int argc, char *argv[]) {
 					Process *adjustments = NULL;
 					switch(procExecuting.inWhichQueue) {
 						case 1:
+							rewind_queue(&level1);
 							adjustments = pointer_to_current(&level1);
 							adjustments->burstRemaining = procExecuting.burstRemaining;
 							adjustments->b = procExecuting.b;
@@ -473,6 +475,7 @@ int main(int argc, char *argv[]) {
 							adjustments->quantumRemaining = procExecuting.quantumRemaining;
 							break;
 						case 2:
+							rewind_queue(&level2);
 							adjustments = pointer_to_current(&level2);
 							adjustments->burstRemaining = procExecuting.burstRemaining;
 							adjustments->b = procExecuting.b;
@@ -480,6 +483,7 @@ int main(int argc, char *argv[]) {
 							adjustments->quantumRemaining = procExecuting.quantumRemaining;
 							break;
 						case 3:
+							rewind_queue(&level3);
 							adjustments = pointer_to_current(&level3);
 							adjustments->burstRemaining = procExecuting.burstRemaining;
 							adjustments->b = procExecuting.b;
@@ -487,6 +491,7 @@ int main(int argc, char *argv[]) {
 							adjustments->quantumRemaining = procExecuting.quantumRemaining;
 							break;
 						case 4:
+							rewind_queue(&level4);
 							adjustments = pointer_to_current(&level4);
 							adjustments->burstRemaining = procExecuting.burstRemaining;
 							adjustments->b = procExecuting.b;
